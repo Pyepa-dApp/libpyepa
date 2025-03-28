@@ -1,9 +1,7 @@
 pub mod api;
-pub mod config;
 pub mod core;
 pub mod models;
 pub mod network;
-pub mod utils;
 
 /// Re-export important types for easier access
 pub use crate::models::{Item, Location, Message, Order, OrderItem, Reputation, VendorListing};
