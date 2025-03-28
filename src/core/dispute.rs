@@ -295,7 +295,9 @@ impl Dispute {
         self.updated_timestamp = timestamp;
 
         // Update the state based on the resolution outcome
-        self.state = resolution.outcome.clone();
+        if let Some(res) = &self.resolution {
+            self.state = res.outcome.clone();
+        }
     }
 }
 
