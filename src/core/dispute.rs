@@ -2,14 +2,13 @@
 
 use crate::core::crypto::Crypto;
 use crate::core::error::Error;
-use crate::core::types::OrderState;
 use crate::models::{Message, Order};
 use crate::Result;
 
 use chrono::Utc;
 use secp256k1::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -811,15 +810,9 @@ impl DisputeManager {
                 let initiated_by_str = payload["initiated_by"]
                     .as_str()
                     .ok_or_else(|| Error::InvalidData("Missing initiated_by in payload".into()))?;
-                let state_str = payload["state"]
-                    .as_str()
-                    .ok_or_else(|| Error::InvalidData("Missing state in payload".into()))?;
 
                 let initiated_by = DisputeParty::from_str(initiated_by_str).ok_or_else(|| {
                     Error::InvalidData(format!("Invalid dispute party: {}", initiated_by_str))
-                })?;
-                let state = DisputeState::from_str(state_str).ok_or_else(|| {
-                    Error::InvalidData(format!("Invalid dispute state: {}", state_str))
                 })?;
 
                 // Create a new dispute
@@ -852,10 +845,6 @@ impl DisputeManager {
                     Error::InvalidData(format!("Dispute not found: {}", dispute_id))
                 })?;
 
-                // Extract more evidence details
-                let evidence_id = payload["evidence_id"]
-                    .as_str()
-                    .ok_or_else(|| Error::InvalidData("Missing evidence_id in payload".into()))?;
                 let description = payload["description"]
                     .as_str()
                     .ok_or_else(|| Error::InvalidData("Missing description in payload".into()))?;

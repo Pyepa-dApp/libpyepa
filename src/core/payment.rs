@@ -268,7 +268,7 @@ impl PaymentDetails {
 
     /// Sets the refund details
     pub fn set_refund(&mut self, refund: RefundDetails, timestamp: u64) {
-        self.refund = Some(refund);
+        self.refund = Some(refund.clone());
         self.updated_timestamp = timestamp;
 
         // Update the status based on the refund amount
@@ -433,31 +433,31 @@ impl BitcoinPaymentProcessor {
 
     /// Verifies a Bitcoin payment
     pub async fn verify_payment(&mut self, payment_id: &str) -> Result<PaymentStatus> {
-        // Get the payment details
+        // First mutable borrow to fetch transaction_id
+        let tx_id = {
+            let payment = self
+                .payments
+                .get_mut(payment_id)
+                .ok_or_else(|| Error::InvalidData(format!("Payment not found: {}", payment_id)))?;
+
+            if !matches!(payment.method, PaymentMethod::Bitcoin) {
+                return Err(Error::InvalidData("Not a Bitcoin payment".into()));
+            }
+
+            payment
+                .transaction_id
+                .clone()
+                .ok_or_else(|| Error::InvalidData("No transaction ID provided".into()))?
+        };
+
+        // Immutable borrow to get confirmations
+        let confirmations = self.get_bitcoin_confirmations(&tx_id).await?;
+
+        // Second mutable borrow to update status
         let payment = self
             .payments
             .get_mut(payment_id)
             .ok_or_else(|| Error::InvalidData(format!("Payment not found: {}", payment_id)))?;
-
-        // Ensure the payment method is Bitcoin
-        if !matches!(payment.method, PaymentMethod::Bitcoin) {
-            return Err(Error::InvalidData("Not a Bitcoin payment".into()));
-        }
-
-        // Ensure there's a transaction ID
-        let tx_id = payment
-            .transaction_id
-            .as_ref()
-            .ok_or_else(|| Error::InvalidData("No transaction ID provided".into()))?;
-
-        // In a real implementation, you would:
-        // 1. Connect to a Bitcoin node or API
-        // 2. Check the transaction exists and is valid
-        // 3. Verify the amount matches
-        // 4. Check the number of confirmations
-
-        // For this example, we'll simulate a successful verification
-        let confirmations = self.get_bitcoin_confirmations(tx_id).await?;
 
         let new_status = if confirmations >= self.min_confirmations {
             PaymentStatus::Confirmed
@@ -465,7 +465,6 @@ impl BitcoinPaymentProcessor {
             PaymentStatus::Pending
         };
 
-        // Update the payment status
         payment.update_status(new_status.clone(), Utc::now().timestamp() as u64);
 
         Ok(new_status)
@@ -511,7 +510,7 @@ impl BitcoinPaymentProcessor {
         // 3. Return the escrow details
 
         // For this example, we'll simulate creating a multisig address
-        let escrow_address = format!("3MultiSig{}", Uuid::new_v4().to_simple());
+        let escrow_address = format!("3MultiSig{}", Uuid::new_v4().simple());
 
         // Create the escrow details
         let escrow = EscrowDetails::new(
@@ -572,7 +571,7 @@ impl BitcoinPaymentProcessor {
         // 3. Return the transaction ID
 
         // For this example, we'll simulate a successful transaction
-        let tx_id = format!("tx_{}", Uuid::new_v4().to_simple());
+        let tx_id = format!("tx_{}", Uuid::new_v4().simple());
 
         // Update the escrow with the release transaction
         escrow.release_transaction_id = Some(tx_id.clone());
@@ -617,7 +616,7 @@ impl BitcoinPaymentProcessor {
         // 2. Return the refund details
 
         // For this example, we'll simulate a successful refund
-        let tx_id = format!("refund_{}", Uuid::new_v4().to_simple());
+        let tx_id = format!("refund_{}", Uuid::new_v4().simple());
         let timestamp = Utc::now().timestamp() as u64;
 
         // Create the refund details
@@ -700,7 +699,7 @@ impl USDCPaymentProcessor {
 
     /// Verifies a USDC payment
     pub async fn verify_payment(&mut self, payment_id: &str) -> Result<PaymentStatus> {
-        // Get the payment details
+        // Get the payment details (mutable borrow)
         let payment = self
             .payments
             .get_mut(payment_id)
@@ -714,23 +713,20 @@ impl USDCPaymentProcessor {
         // Ensure there's a transaction ID
         let tx_id = payment
             .transaction_id
-            .as_ref()
+            .clone()
             .ok_or_else(|| Error::InvalidData("No transaction ID provided".into()))?;
 
-        // Get the chain from the payment method
-        let chain = match &payment.method {
+        // Extract the chain to avoid holding a mutable reference
+        let chain = match payment.method.clone() {
             PaymentMethod::USDC(c) => c,
             _ => unreachable!(),
         };
 
-        // In a real implementation, you would:
-        // 1. Connect to the appropriate blockchain API
-        // 2. Check the transaction exists and is valid
-        // 3. Verify the amount matches
-        // 4. Check the number of confirmations
+        // Drop mutable borrow before calling get_usdc_confirmations
+        drop(payment);
 
-        // For this example, we'll simulate a successful verification
-        let confirmations = self.get_usdc_confirmations(tx_id, chain).await?;
+        // Determine new status after releasing mutable borrow on 'payment'
+        let confirmations = self.get_usdc_confirmations(&tx_id, &chain).await?;
 
         let new_status = if confirmations >= self.min_confirmations {
             PaymentStatus::Confirmed
@@ -738,9 +734,14 @@ impl USDCPaymentProcessor {
             PaymentStatus::Pending
         };
 
-        // Update the payment status
-        payment.update_status(new_status.clone(), Utc::now().timestamp() as u64);
+        // Get the payment details again for updating status
+        let payment = self
+            .payments
+            .get_mut(payment_id)
+            .ok_or_else(|| Error::InvalidData(format!("Payment not found: {}", payment_id)))?;
 
+        // Update the payment status (still have mutable reference)
+        payment.update_status(new_status.clone(), Utc::now().timestamp() as u64);
         Ok(new_status)
     }
 
@@ -800,7 +801,7 @@ impl USDCPaymentProcessor {
         // 3. Return the escrow details
 
         // For this example, we'll simulate creating a smart contract escrow
-        let escrow_address = format!("0xEscrow{}", Uuid::new_v4().to_simple());
+        let escrow_address = format!("0xEscrow{}", Uuid::new_v4().simple());
 
         // Create the escrow details
         let escrow = EscrowDetails::new(
@@ -861,7 +862,7 @@ impl USDCPaymentProcessor {
         // 3. Return the transaction ID
 
         // For this example, we'll simulate a successful transaction
-        let tx_id = format!("0x{}", Uuid::new_v4().to_simple());
+        let tx_id = format!("0x{}", Uuid::new_v4().simple());
 
         // Update the escrow with the release transaction
         escrow.release_transaction_id = Some(tx_id.clone());
@@ -906,7 +907,7 @@ impl USDCPaymentProcessor {
         // 2. Return the refund details
 
         // For this example, we'll simulate a successful refund
-        let tx_id = format!("0x{}", Uuid::new_v4().to_simple());
+        let tx_id = format!("0x{}", Uuid::new_v4().simple());
         let timestamp = Utc::now().timestamp() as u64;
 
         // Create the refund details
@@ -1218,15 +1219,17 @@ mod tests {
 
         // Simulate setting a transaction ID
         let bitcoin_processor = &mut payment_manager.bitcoin_processor;
-        let mut payment_details = bitcoin_processor
+        let payment_details = bitcoin_processor
             .payments
             .get_mut(&payment.payment_id)
             .unwrap();
         payment_details.transaction_id = Some("txid_123".to_string());
 
         // Verify the payment
+        let payment_id = payment.payment_id.clone();
+        let payment_details = bitcoin_processor.payments.get(&payment_id).unwrap().clone();
         let status = payment_manager
-            .verify_payment(&payment.payment_id, &PaymentMethod::Bitcoin)
+            .verify_payment(&payment_id, &PaymentMethod::Bitcoin)
             .await
             .unwrap();
 
