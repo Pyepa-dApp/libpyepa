@@ -1,14 +1,14 @@
 use crate::core::error::Error;
 use crate::core::types::Result;
-use curve25519_dalek::constants::BASEPOINT;
+use curve25519_dalek::constants::ED25519_BASEPOINT_POINT;
 use curve25519_dalek::montgomery::MontgomeryPoint;
 use curve25519_dalek::scalar::Scalar;
 use hkdf::Hkdf;
-use rand_core::OsRng;
-use ring::aead::{Aead, BoundKey, Nonce, UnboundKey, AES_256_GCM, CHACHA20_POLY1305};
+use ring::aead::{BoundKey, Nonce, UnboundKey, AES_256_GCM, CHACHA20_POLY1305};
 use ring::digest::{Context, SHA256};
 use ring::hmac;
 use ring::rand::SystemRandom;
+use secp256k1::rand::rngs::OsRng;
 use secp256k1::{ecdsa, PublicKey, Secp256k1, SecretKey};
 use std::convert::TryInto;
 
@@ -25,7 +25,9 @@ pub fn hash_sha256(data: &[u8]) -> Result<Vec<u8>> {
 /// Generates an ECDSA key pair using the secp256k1 curve.
 pub fn generate_ecdsa_keypair() -> Result<(String, String)> {
     let s = Secp256k1::new();
-    let (secret_key, public_key) = s.generate_keypair(&mut OsRng);
+    let mut rng =
+        OsRng::new().map_err(|e| Error::CryptoError(format!("Failed to create RNG: {}", e)))?;
+    let (secret_key, public_key) = s.generate_keypair(&mut rng);
     Ok((
         secret_key
             .secret_bytes()
@@ -85,7 +87,7 @@ pub fn verify_ecdsa(public_key_hex: &str, signature_hex: &str, data: &[u8]) -> R
 pub fn generate_curve25519_keypair() -> Result<(Vec<u8>, Vec<u8>)> {
     let mut rng = OsRng;
     let secret = Scalar::random(&mut rng);
-    let public = &secret * &BASEPOINT;
+    let public = (&secret * &ED25519_BASEPOINT_POINT).to_montgomery();
     Ok((secret.as_bytes().to_vec(), public.as_bytes().to_vec()))
 }
 
@@ -136,7 +138,7 @@ pub fn encrypt_aes_gcm(
 
     let unbound_key = UnboundKey::new(&AES_256_GCM, key)
         .map_err(|_| Error::CryptoError("Failed to create AES-GCM unbound key".into()))?;
-    let key_ref = BoundKey::from(unbound_key);
+    let mut sealing_key = ring::aead::SealingKey::new(unbound_key, nonce);
     let nonce_struct = Nonce::try_from(nonce)
         .map_err(|_| Error::CryptoError("Failed to create AES-GCM nonce".into()))?;
 
