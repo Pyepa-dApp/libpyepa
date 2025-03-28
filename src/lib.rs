@@ -1,10 +1,3 @@
-//! # libpyepa
-//!
-//! A Rust SDK for the Pyepa peer-to-peer order management protocol.
-//!
-//! This SDK enables direct peer-to-peer order management between Buyers and Vendors
-//! without the need for a central intermediary.
-
 pub mod api;
 pub mod config;
 pub mod core;
@@ -12,6 +5,7 @@ pub mod models;
 pub mod network;
 pub mod utils;
 
+/// Re-export important types for easier access
 pub use crate::models::{Item, Location, Message, Order, OrderItem, Reputation, VendorListing};
 
 pub use crate::core::error::Error;
