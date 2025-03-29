@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // (In a real scenario, this would be received over the network)
     let buyer_keypair = Crypto::generate_identity_keypair()?;
     let buyer_public_key = Crypto::encode_base64(&buyer_keypair.public_key.serialize());
-    let vendor_public_key = Crypto::encode_base64(&vendor_api.public_key.serialize());
+    let vendor_public_key = Crypto::encode_base64(&vendor_api.get_public_key().serialize());
 
     let order_items = vec![OrderItem::new("item-123".to_string(), 2)];
     let buyer_location = Location::new(34.0522, -118.2437); // Los Angeles

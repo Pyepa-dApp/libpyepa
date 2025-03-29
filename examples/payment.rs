@@ -71,12 +71,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 3. Get the transaction ID
 
     // Simulate setting the transaction ID
-    let btc_processor = &mut vendor_payment_manager.bitcoin_processor;
-    let mut btc_payment_details = btc_processor
-        .payments
-        .get_mut(&btc_payment.payment_id)
-        .unwrap();
-    btc_payment_details.transaction_id = Some("txid_123456789".to_string());
+    vendor_payment_manager.set_transaction_id(
+        &btc_payment.payment_id,
+        "txid_123456789",
+        &PaymentMethod::Bitcoin,
+    )?;
 
     println!(
         "Payment sent with transaction ID: {}",
@@ -90,6 +89,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     println!("Payment status: {}", btc_status.as_str());
+
+    // Get payment details for the message
+    let btc_payment_details = vendor_payment_manager
+        .get_payment_details(&btc_payment.payment_id, &PaymentMethod::Bitcoin)?;
 
     // Create a payment confirmation message
     let btc_message = vendor_payment_manager
@@ -147,20 +150,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Buyer simulates making the payment to the escrow
     println!("\nBuyer makes the USDC payment to the escrow...");
-
-    // In a real implementation, the buyer would:
-    // 1. Create a USDC transaction to the escrow address
-    // 2. Submit it to the Ethereum network
-    // 3. Get the transaction ID
+    // Simulate setting the transaction ID
+    vendor_payment_manager.set_transaction_id(
+        &usdc_payment.payment_id,
+        "0xabcdef123456789",
+        &PaymentMethod::USDC(USDCChain::Ethereum),
+    )?;
 
     // Simulate setting the transaction ID
-    let usdc_processor = &mut vendor_payment_manager.usdc_processor;
-    let mut usdc_payment_details = usdc_processor
-        .payments
-        .get_mut(&usdc_payment.payment_id)
-        .unwrap();
-    usdc_payment_details.transaction_id = Some("0xabcdef123456789".to_string());
+    vendor_payment_manager.set_transaction_id(
+        &usdc_payment.payment_id,
+        "0xabcdef123456789",
+        &PaymentMethod::USDC(USDCChain::Ethereum),
+    )?;
 
+    // Get payment details for display
+    let usdc_payment_details = vendor_payment_manager.get_payment_details(
+        &usdc_payment.payment_id,
+        &PaymentMethod::USDC(USDCChain::Ethereum),
+    )?;
     println!(
         "Payment sent to escrow with transaction ID: {}",
         usdc_payment_details.transaction_id.as_ref().unwrap()
@@ -213,26 +221,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!(
-        "Created order for refund example with ID: {}",
-        refund_order.order_id
-    );
+    // Simulate payment and confirmation
+    vendor_payment_manager.set_transaction_id(
+        &refund_payment.payment_id,
+        "txid_refund_test",
+        &PaymentMethod::Bitcoin
+    )?;
+    vendor_payment_manager.set_payment_status(
+        &refund_payment.payment_id,
+        PaymentStatus::Confirmed,
+        &PaymentMethod::Bitcoin
+    )?;
 
-    // Vendor creates a payment request
-    println!("Vendor creates payment request...");
-    let refund_payment = vendor_payment_manager.create_payment_request(
+    // Get payment details for display
+    let refund_payment_details = vendor_payment_manager.get_payment_details(
+        &refund_payment.payment_id,
+        &PaymentMethod::Bitcoin
+    )?;
         &refund_order,
         "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh".to_string(),
     )?;
 
     // Simulate payment and confirmation
-    let btc_processor = &mut vendor_payment_manager.bitcoin_processor;
-    let mut refund_payment_details = btc_processor
-        .payments
-        .get_mut(&refund_payment.payment_id)
-        .unwrap();
-    refund_payment_details.transaction_id = Some("txid_refund_test".to_string());
-    refund_payment_details.status = PaymentStatus::Confirmed;
+    vendor_payment_manager.set_transaction_id(
+        &refund_payment.payment_id,
+        "txid_refund_test",
+        &PaymentMethod::Bitcoin,
+    )?;
+    vendor_payment_manager.set_payment_status(
+        &refund_payment.payment_id,
+        PaymentStatus::Confirmed,
+        &PaymentMethod::Bitcoin,
+    )?;
 
+    // Get payment details for display
+    let refund_payment_details = vendor_payment_manager
+        .get_payment_details(&refund_payment.payment_id, &PaymentMethod::Bitcoin)?;
     println!(
         "Payment confirmed with transaction ID: {}",
         refund_payment_details.transaction_id.as_ref().unwrap()
