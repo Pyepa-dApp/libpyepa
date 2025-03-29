@@ -9,9 +9,10 @@ use aes_gcm::{
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use hkdf::Hkdf;
 use rand::{rngs::OsRng, RngCore};
-use ring::{digest, rand};
+use ring::digest;
 use secp256k1::{Message as Secp256k1Message, PublicKey, Secp256k1, SecretKey};
-use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519PrivateKey};
+use sha2::Sha256;
+use x25519_dalek::{EphemeralSecret as X25519PrivateKey, PublicKey as X25519PublicKey};
 
 /// Key pair for identity (long-term keys)
 pub struct IdentityKeyPair {
@@ -111,9 +112,8 @@ impl Crypto {
             let dh4 = ephemeral_key.diffie_hellman(onetime_prekey);
             shared_secret.extend_from_slice(dh4.as_bytes());
         }
-
         // Derive the final shared secret using HKDF
-        let h = Hkdf::<digest::Sha256>::new(None, &shared_secret);
+        let h = Hkdf::<Sha256>::new(None, &shared_secret);
         let mut okm = [0u8; 32];
         h.expand(b"X3DH", &mut okm)
             .expect("HKDF expansion should not fail with valid parameters");
