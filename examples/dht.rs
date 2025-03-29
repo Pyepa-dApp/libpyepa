@@ -1,6 +1,6 @@
 //! Example usage of the DHT for vendor discovery and listing publication
 
-use my_p2p_order_sdk::{
+use libpyepa::{
     core::dht::DhtClient,
     models::{Item, Location, VendorListing},
 };

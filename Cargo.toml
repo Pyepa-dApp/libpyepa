@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 description = "A peer-to-peer order management protocol SDK"
 license = "MIT"
-repository = "https://github.com/yourusername/my_p2p_order_sdk"
+repository = "https://github.com/Pyepa-dApp/libpyepa"
 
 [dependencies]
 # Cryptography

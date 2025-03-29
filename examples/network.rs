@@ -1,6 +1,6 @@
 //! Example usage of the network module
 
-use my_p2p_order_sdk::{
+use libpyepa::{
     core::crypto::Crypto,
     models::Message as OrderMessage,
     network::{

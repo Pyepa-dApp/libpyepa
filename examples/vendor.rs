@@ -1,6 +1,6 @@
 //! Example usage of the SDK for a Vendor
 
-use my_p2p_order_sdk::{
+use libpyepa::{
     api::vendor::VendorApi,
     core::crypto::Crypto,
     models::{Item, Location, Order, OrderItem},

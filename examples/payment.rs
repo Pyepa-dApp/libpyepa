@@ -1,7 +1,7 @@
 //! Example usage of the payment system with Bitcoin and USDC
 
 use chrono::Utc;
-use my_p2p_order_sdk::{
+use libpyepa::{
     core::{
         crypto::Crypto,
         payment::{EscrowType, PaymentManager, PaymentMethod, PaymentStatus, USDCChain},

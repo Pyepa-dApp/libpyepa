@@ -1,7 +1,7 @@
 //! Example usage of the dispute resolution framework
 
 use chrono::Utc;
-use my_p2p_order_sdk::{
+use libpyepa::{
     core::{
         crypto::Crypto,
         dispute::{DisputeClient, DisputeParty, DisputeState, EvidenceType},
