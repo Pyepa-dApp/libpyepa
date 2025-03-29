@@ -5,7 +5,7 @@ use libp2p::{
     core::upgrade,
     identity,
     kad::{
-        record::store::MemoryStore, Event as KadEvent, Kademlia, KademliaConfig, QueryResult,
+        self, record::store::MemoryStore, Behaviour as Kademlia, Event as KadEvent, QueryResult,
         Record, RecordKey,
     },
     noise,
@@ -14,7 +14,6 @@ use libp2p::{
     yamux, Multiaddr, PeerId, Transport,
 };
 use serde_json;
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -224,7 +223,7 @@ async fn run_dht_service(
 
     // Create a Kademlia behavior
     let store = MemoryStore::new(local_peer_id);
-    let mut kademlia_config = KademliaConfig::default();
+    let mut kademlia_config = kad::Config::default();
     kademlia_config.set_query_timeout(Duration::from_secs(DHT_TIMEOUT_SECS));
     let mut kademlia = Kademlia::with_config(local_peer_id, store, kademlia_config);
 

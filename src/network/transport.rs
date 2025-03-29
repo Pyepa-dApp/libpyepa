@@ -6,8 +6,9 @@ use crate::Result;
 
 use libp2p::core::transport::OrTransport;
 use libp2p::dns::TokioDnsConfig;
+use libp2p::mplex;
 use libp2p::websocket::WsConfig;
-use libp2p::{core::upgrade, identity, mplex, noise, tcp::TokioTcpConfig, yamux, Transport};
+use libp2p::{core::upgrade, identity, noise, tcp::Config as TokioTcpConfig, yamux, Transport};
 use std::time::Duration;
 
 /// Default timeout for connections (in seconds)
@@ -20,8 +21,9 @@ pub fn create_transport(
 ) -> Result<libp2p::core::transport::Boxed<(libp2p::PeerId, libp2p::core::muxing::StreamMuxerBox)>>
 {
     // Create an authenticated noise protocol using the provided keypair
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(keypair)
+    let noise_keys = noise::Config::new(&keypair)
+        .unwrap()
+        .into_authenticated()
         .map_err(|e| Error::Network(format!("Failed to create noise keys: {}", e)))?;
 
     let timeout =
@@ -39,9 +41,9 @@ pub fn create_transport(
     // Combine TCP and WebSocket transports
     let transport = OrTransport::new(tcp_transport, ws_transport)
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise_keys)
         .multiplex(upgrade::SelectUpgrade::new(
-            yamux::YamuxConfig::default(),
+            yamux::Config::default(),
             mplex::MplexConfig::default(),
         ))
         .timeout(timeout)

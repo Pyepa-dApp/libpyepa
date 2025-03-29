@@ -2,16 +2,14 @@
 
 use crate::core::crypto::Crypto;
 use crate::core::error::Error;
-use crate::core::types::OrderState;
 use crate::models::{Message, Order};
 use crate::Result;
 
 use chrono::Utc;
 use secp256k1::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
-use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
