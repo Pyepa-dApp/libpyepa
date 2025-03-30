@@ -3,7 +3,7 @@
 use crate::core::error::Error;
 use crate::Result;
 
-use libp2p::{identity::PublicKey, Multiaddr, PeerId};
+use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -286,7 +286,7 @@ impl PeerManager {
             .filter(|(_, info)| {
                 !info.is_active()
                     && info.state == PeerConnectionState::Disconnected
-                    && !self.banned_peers.contains(info.peer_id)
+                    && !self.banned_peers.contains(&info.peer_id)
             })
             .map(|(peer_id, _)| *peer_id)
             .collect();
