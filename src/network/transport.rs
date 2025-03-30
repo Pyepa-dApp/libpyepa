@@ -6,7 +6,7 @@ use crate::Result;
 
 use libp2p::core::transport::OrTransport;
 use libp2p::dns::TokioDnsConfig;
-use libp2p::mplex;
+use libp2p_mplex as mplex;
 use libp2p::websocket::WsConfig;
 use libp2p::{core::upgrade, identity, noise, tcp::Config as TokioTcpConfig, yamux, Transport};
 use std::time::Duration;
