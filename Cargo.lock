@@ -2003,6 +2003,7 @@ dependencies = [
  "dirs",
  "ed25519-dalek",
  "env_logger",
+ "futures",
  "futures-util",
  "hex",
  "hkdf",
