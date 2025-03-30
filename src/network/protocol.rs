@@ -7,13 +7,20 @@ use crate::network::transport::MessageCodec;
 use crate::Result;
 
 use futures::prelude::*;
+use libp2p::swarm::ConnectionHandlerEvent;
 use libp2p::{
-    core::connection::ConnectionId,
     swarm::{
-        NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-        OneShotHandlerConfig, OneShotHandlerIn, OneShotHandlerOut, PollParameters,
+        ConnectionId, 
+        ConnectionHandler,
+        NetworkBehaviour, 
+        NotifyHandler, 
+        OneShotHandler,
+        OneShotHandlerConfig, 
+        PollParameters,
+        ToSwarm,
     },
-    Multiaddr, PeerId,
+    Multiaddr, 
+    PeerId,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -132,13 +139,13 @@ pub enum ProtocolInput {
 }
 
 /// Protocol handler input
-pub type ProtocolHandlerIn = OneShotHandlerIn<Vec<u8>>;
+pub type ProtocolHandlerIn = <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::InEvent;
 
 /// Protocol handler output
-pub type ProtocolHandlerOut = OneShotHandlerOut<Vec<u8>, Vec<u8>>;
+pub type ProtocolHandlerOut = <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::OutEvent;
 
 /// Protocol handler config
-pub type ProtocolHandlerConfig = OneShotHandlerConfig<Vec<u8>>;
+pub type ProtocolHandlerConfig = OneShotHandlerConfig;
 
 /// Protocol behaviour
 pub struct ProtocolBehaviour {
@@ -149,7 +156,7 @@ pub struct ProtocolBehaviour {
     /// Message handlers
     message_handlers: Vec<Box<dyn MessageHandler>>,
     /// Pending events to emit
-    pending_events: VecDeque<NetworkBehaviourAction<ProtocolInput, ProtocolEvent>>,
+    pending_events: VecDeque<ToSwarm<ProtocolEvent, ProtocolHandlerIn>>,
     /// Pending outbound messages
     pending_outbound: VecDeque<(PeerId, NetworkMessage)>,
     /// Recently seen message IDs to avoid duplicates
@@ -253,7 +260,7 @@ impl ProtocolBehaviour {
 
         // Emit message received event
         self.pending_events
-            .push_back(NetworkBehaviourAction::GenerateEvent(
+            .push_back(ToSwarm::GenerateEvent(
                 ProtocolEvent::MessageReceived {
                     message: message.clone(),
                     from,
@@ -314,7 +321,7 @@ impl ProtocolBehaviour {
 
         for peer_id in to_disconnect {
             self.pending_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
+                .push_back(ToSwarm::GenerateEvent(
                     ProtocolEvent::PeerDisconnected { peer_id },
                 ));
             self.peer_manager.mark_disconnected(&peer_id);
@@ -367,7 +374,7 @@ impl NetworkBehaviour for ProtocolBehaviour {
 
         // Emit peer connected event
         self.pending_events
-            .push_back(NetworkBehaviourAction::GenerateEvent(
+            .push_back(ToSwarm::GenerateEvent(
                 ProtocolEvent::PeerConnected {
                     peer_id: *peer_id,
                     addr,
@@ -392,7 +399,7 @@ impl NetworkBehaviour for ProtocolBehaviour {
 
         // Emit peer disconnected event
         self.pending_events
-            .push_back(NetworkBehaviourAction::GenerateEvent(
+            .push_back(ToSwarm::GenerateEvent(
                 ProtocolEvent::PeerDisconnected { peer_id: *peer_id },
             ));
     }
@@ -437,7 +444,7 @@ impl NetworkBehaviour for ProtocolBehaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::OutEvent, Self::ConnectionHandler>> {
         // Process pending events
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(event);
@@ -461,7 +468,7 @@ impl NetworkBehaviour for ProtocolBehaviour {
                     match MessageCodec::encode(&message) {
                         Ok(encoded) => {
                             // Send the message
-                            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                            return Poll::Ready(ToSwarm::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::Any,
                                 event: ProtocolHandlerIn::Request { request: encoded },
