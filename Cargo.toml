@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 description = "A peer-to-peer order management protocol SDK"
-license = "MIT"
+license = "APACHE 2.0"
 repository = "https://github.com/Pyepa-dApp/libpyepa"
 
 [dependencies]
