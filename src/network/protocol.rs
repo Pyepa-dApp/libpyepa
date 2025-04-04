@@ -10,17 +10,10 @@ use futures::prelude::*;
 use libp2p::swarm::ConnectionHandlerEvent;
 use libp2p::{
     swarm::{
-        ConnectionId, 
-        ConnectionHandler,
-        NetworkBehaviour, 
-        NotifyHandler, 
-        OneShotHandler,
-        OneShotHandlerConfig, 
-        PollParameters,
-        ToSwarm,
+        ConnectionHandler, ConnectionId, NetworkBehaviour, NotifyHandler, OneShotHandler,
+        OneShotHandlerConfig, PollParameters, ToSwarm,
     },
-    Multiaddr, 
-    PeerId,
+    Multiaddr, PeerId,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -139,10 +132,12 @@ pub enum ProtocolInput {
 }
 
 /// Protocol handler input
-pub type ProtocolHandlerIn = <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::InEvent;
+pub type ProtocolHandlerIn =
+    <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::InboundProtocol;
 
 /// Protocol handler output
-pub type ProtocolHandlerOut = <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::OutEvent;
+pub type ProtocolHandlerOut =
+    <OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>> as ConnectionHandler>::OutboundProtocol;
 
 /// Protocol handler config
 pub type ProtocolHandlerConfig = OneShotHandlerConfig;
@@ -246,11 +241,12 @@ impl ProtocolBehaviour {
         if let Some(recipient) = &message.recipient {
             if recipient != &message.recipient.unwrap_or(PeerId::random()) {
                 // This message is not for us, relay it if enabled
-                if self.config.enable_relaying && message.decrement_ttl() {
+                let mut relay_message = message.clone();
+                if self.config.enable_relaying && relay_message.decrement_ttl() {
                     if let Some(target_peer) = self.peer_manager.get_peer(recipient) {
                         if target_peer.state == crate::network::peer::PeerConnectionState::Connected
                         {
-                            self.send_message(*recipient, message.clone());
+                            self.send_message(*recipient, relay_message);
                         }
                     }
                 }
@@ -260,12 +256,10 @@ impl ProtocolBehaviour {
 
         // Emit message received event
         self.pending_events
-            .push_back(ToSwarm::GenerateEvent(
-                ProtocolEvent::MessageReceived {
-                    message: message.clone(),
-                    from,
-                },
-            ));
+            .push_back(ToSwarm::GenerateEvent(ProtocolEvent::MessageReceived {
+                message: message.clone(),
+                from,
+            }));
 
         // Pass the message to handlers
         for handler in &self.message_handlers {
@@ -320,10 +314,9 @@ impl ProtocolBehaviour {
         }
 
         for peer_id in to_disconnect {
-            self.pending_events
-                .push_back(ToSwarm::GenerateEvent(
-                    ProtocolEvent::PeerDisconnected { peer_id },
-                ));
+            self.pending_events.push_back(ToSwarm::GenerateEvent(
+                ProtocolEvent::PeerDisconnected { peer_id },
+            ));
             self.peer_manager.mark_disconnected(&peer_id);
         }
     }
@@ -331,84 +324,86 @@ impl ProtocolBehaviour {
 
 impl NetworkBehaviour for ProtocolBehaviour {
     type ConnectionHandler = OneShotHandler<Vec<u8>, Vec<u8>, Vec<u8>>;
-    type OutEvent = ProtocolEvent;
+    type ToSwarm = ProtocolEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let mut config = ProtocolHandlerConfig::default();
-        config.max_response_size = self.config.max_message_size;
-        config.max_request_size = self.config.max_message_size;
-
-        OneShotHandler::new(PROTOCOL_NAME.to_vec(), config)
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        _peer: PeerId,
+        _local_addr: &Multiaddr,
+        _remote_addr: &Multiaddr,
+    ) -> std::result::Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
+        Ok(self.new_handler())
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        if let Some(peer) = self.peer_manager.get_peer(peer_id) {
-            peer.addresses.clone()
-        } else {
-            Vec::new()
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        _peer: PeerId,
+        _addr: &Multiaddr,
+        _role_override: libp2p::core::Endpoint,
+    ) -> Result<libp2p::swarm::THandler<Self>, libp2p::swarm::ConnectionDenied> {
+        Ok(self.new_handler())
+    }
+
+    fn on_swarm_event(&mut self, event: libp2p::swarm::FromSwarm<'_>) {
+        match event {
+            libp2p::swarm::FromSwarm::ConnectionEstablished(connection_established) => {
+                let peer_id = connection_established.peer_id;
+                let endpoint = connection_established.endpoint;
+
+                let addr = match endpoint {
+                    libp2p::core::ConnectedPoint::Dialer { address, .. } => address.clone(),
+                    libp2p::core::ConnectedPoint::Listener { send_back_addr, .. } => {
+                        send_back_addr.clone()
+                    }
+                };
+
+                if let Err(e) = self
+                    .peer_manager
+                    .mark_connected(peer_id, Some(addr.clone()))
+                {
+                    log::warn!("Failed to mark peer as connected: {}", e);
+                    return;
+                }
+
+                // Initialize ping/pong tracking
+                self.last_ping.insert(peer_id, Instant::now());
+                self.last_pong.insert(peer_id, Instant::now());
+
+                // Emit peer connected event
+                self.pending_events.push_back(ToSwarm::GenerateEvent(
+                    ProtocolEvent::PeerConnected {
+                        peer_id: peer_id,
+                        addr,
+                    },
+                ));
+            }
+            libp2p::swarm::FromSwarm::ConnectionClosed(connection_closed) => {
+                let peer_id = connection_closed.peer_id;
+                self.peer_manager.mark_disconnected(&peer_id);
+
+                // Clean up ping/pong tracking
+                self.last_ping.remove(&peer_id);
+                self.last_pong.remove(&peer_id);
+
+                // Clean up secure channels
+                self.secure_channels.remove(&peer_id);
+
+                // Emit peer disconnected event
+                self.pending_events.push_back(ToSwarm::GenerateEvent(
+                    ProtocolEvent::PeerDisconnected { peer_id: peer_id },
+                ));
+            }
+            _ => {}
         }
     }
 
-    fn inject_connected(
-        &mut self,
-        peer_id: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &libp2p::core::ConnectedPoint,
-    ) {
-        let addr = match endpoint {
-            libp2p::core::ConnectedPoint::Dialer { address, .. } => address.clone(),
-            libp2p::core::ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr.clone(),
-        };
-
-        if let Err(e) = self
-            .peer_manager
-            .mark_connected(*peer_id, Some(addr.clone()))
-        {
-            log::warn!("Failed to mark peer as connected: {}", e);
-            return;
-        }
-
-        // Initialize ping/pong tracking
-        self.last_ping.insert(*peer_id, Instant::now());
-        self.last_pong.insert(*peer_id, Instant::now());
-
-        // Emit peer connected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(
-                ProtocolEvent::PeerConnected {
-                    peer_id: *peer_id,
-                    addr,
-                },
-            ));
-    }
-
-    fn inject_disconnected(
-        &mut self,
-        peer_id: &PeerId,
-        _: &ConnectionId,
-        _: &libp2p::core::ConnectedPoint,
-    ) {
-        self.peer_manager.mark_disconnected(peer_id);
-
-        // Clean up ping/pong tracking
-        self.last_ping.remove(peer_id);
-        self.last_pong.remove(peer_id);
-
-        // Clean up secure channels
-        self.secure_channels.remove(peer_id);
-
-        // Emit peer disconnected event
-        self.pending_events
-            .push_back(ToSwarm::GenerateEvent(
-                ProtocolEvent::PeerDisconnected { peer_id: *peer_id },
-            ));
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        _: ConnectionId,
-        event: <Self::ConnectionHandler as libp2p::swarm::ConnectionHandler>::OutEvent,
+        connection_id: ConnectionId,
+        event: <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour,
     ) {
         match event {
             ProtocolHandlerOut::Response(response) => {
@@ -444,7 +439,8 @@ impl NetworkBehaviour for ProtocolBehaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<ToSwarm<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self::ToSwarm, <Self::ConnectionHandler as ConnectionHandler>::ToBehaviour>>
+    {
         // Process pending events
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(event);
@@ -471,46 +467,43 @@ impl NetworkBehaviour for ProtocolBehaviour {
                             return Poll::Ready(ToSwarm::NotifyHandler {
                                 peer_id,
                                 handler: NotifyHandler::Any,
-                                event: ProtocolHandlerIn::Request { request: encoded },
+                                event: encoded,
                             });
                         }
                         Err(e) => {
                             // Emit message send failed event
-                            self.pending_events
-                                .push_back(NetworkBehaviourAction::GenerateEvent(
-                                    ProtocolEvent::MessageSendFailed {
-                                        message_id: message.id,
-                                        to: peer_id,
-                                        error: format!("Failed to encode message: {}", e),
-                                    },
-                                ));
+                            self.pending_events.push_back(ToSwarm::GenerateEvent(
+                                ProtocolEvent::MessageSendFailed {
+                                    message_id: message.id,
+                                    to: peer_id,
+                                    error: format!("Failed to encode message: {}", e),
+                                },
+                            ));
                         }
                     }
                 } else {
                     // Peer is not connected
-                    self.pending_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            ProtocolEvent::MessageSendFailed {
-                                message_id: message.id,
-                                to: peer_id,
-                                error: "Peer is not connected".into(),
-                            },
-                        ));
-                }
-            } else {
-                // Peer is unknown
-                self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
+                    self.pending_events.push_back(ToSwarm::GenerateEvent(
                         ProtocolEvent::MessageSendFailed {
                             message_id: message.id,
                             to: peer_id,
-                            error: "Peer is unknown".into(),
+                            error: "Peer is not connected".into(),
                         },
                     ));
+                }
+            } else {
+                // Peer is unknown
+                self.pending_events.push_back(ToSwarm::GenerateEvent(
+                    ProtocolEvent::MessageSendFailed {
+                        message_id: message.id,
+                        to: peer_id,
+                        error: "Peer is unknown".into(),
+                    },
+                ));
             }
 
             // Try again with the next message
-            return self.poll(cx, _);
+            return self.poll(cx, &mut ());
         }
 
         Poll::Pending
