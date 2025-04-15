@@ -8,7 +8,7 @@
 
 **1. Introduction**
 
-This document specifies a peer-to-peer protocol for managing orders directly between Buyers and Vendors without the need for a central intermediary. The protocol aims to provide robust features for discovery, secure and private order management, transparent order history, and mechanisms for building trust and resolving disputes, implemented using the Rust programming language.
+This document specifies a peer-to-peer protocol for managing orders directly between Buyers and Vendors without the need for a central intermediary. The protocol aims to provide robust features for discovery, secure and private order management, transparent order history, and mechanisms for building trust and resolving disputes, implemented in Rust.
 
 **2. Goals and Requirements**
 
@@ -21,7 +21,6 @@ The primary goals of this protocol are to:
 - Provide a framework for decentralized dispute resolution.
 - Ensure that only the Buyer and Vendor involved in a specific order can access the order details.
 - Allow each party to maintain their independent transaction history.
-- Be implementable primarily using the Rust programming language and its ecosystem.
 
 **3. Actors**
 
@@ -35,13 +34,13 @@ The protocol involves two primary actors:
 The protocol relies on the following core components:
 
 - **Cryptographic Primitives (Rust Libraries Recommended):**
-  - **Hashing Algorithm:** SHA-256 (e.g., using `rust-crypto` or `ring`).
-  - **Digital Signature Scheme:** ECDSA using secp256k1 (e.g., using `secp256k1`). Each user possesses a long-term Identity Key pair (`IKpub`, `IKpriv`).
-  - **Key Exchange Protocol:** Adaptation of X3DH using Curve25519 (available in libraries like `curve25519-dalek` or within `ring`).
-  - **Symmetric Encryption:** AES-GCM (e.g., using `rust-crypto` or `ring`).
-  - **Key Derivation Function (KDF):** HKDF (e.g., using the `hkdf` crate).
+  - **Hashing Algorithm:** SHA-256 (using `ring`).
+  - **Digital Signature Scheme:** ECDSA using secp256k1 (using `secp256k1`). Each user possesses a long-term Identity Key pair (`IKpub`, `IKpriv`).
+  - **Key Exchange Protocol:** Adaptation of X3DH using Curve25519 (using `curve25519-dalek` or within `ring`).
+  - **Symmetric Encryption:** AES-GCM (using `ring`).
+  - **Key Derivation Function (KDF):** HKDF (using `hkdf`).
 - **Decentralized Directory (DHT) for Discovery (Rust Libraries Recommended):**
-  - Kademlia protocol (e.g., using `tokio-dht` or `libp2p`).
+  - Kademlia protocol (using `libp2p`).
 - **Reputation System:**
   - A decentralized system for storing and retrieving Vendor ratings and reviews.
 - **Payment Integration:**
@@ -53,7 +52,7 @@ The protocol relies on the following core components:
 
 **5. Protocol Workflow**
 
-**5.1. Vendor Listing (Enhanced):**
+**5.1. Vendor Listing:**
 
 1.  A Vendor generates a listing (represented as a Rust `struct`) containing:
     - `vendor_identity_key_public`: `String` (Base64 or hex encoded).
@@ -66,7 +65,7 @@ The protocol relies on the following core components:
     - `signature`: `String` (Base64 or hex encoded).
 2.  The Vendor serializes this listing (e.g., to JSON using `serde_json`), signs it using their identity private key, and publishes it to the DHT using a key derived from their public key or relevant search terms.
 
-**5.2. Buyer Discovery (Enhanced):**
+**5.2. Buyer Discovery:**
 
 1.  A Buyer's client queries the DHT using search terms (e.g., item keywords, location).
 2.  The DHT returns a list of serialized Vendor listings.
@@ -220,7 +219,3 @@ pub struct Reputation {
 - **DHT:** `tokio-dht` or `libp2p`.
 - **Networking:** `tokio` or `async-std`.
 - **Data Serialization:** `serde` and `serde_json`.
-
-**9. Conclusion**
-
-This comprehensive technical specification outlines a peer-to-peer order management protocol designed for implementation in Rust. It incorporates features for enhanced discovery, secure communication, order lifecycle management, payment integration considerations, a dispute resolution framework, and a decentralized reputation system. Developers can use this document as a solid foundation for building a fully functional and secure decentralized ordering platform.
